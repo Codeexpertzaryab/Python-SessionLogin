@@ -1,0 +1,11 @@
+{
+    "param":
+    {
+        
+        "local_server":"mysql://root:zaryab@localhost/login",
+        "Production_server":"mysql://root:zaryab@localhost/login",
+        "gmail-user":"zk126128@gmail.com",
+        "gmail-password":"gcfwjbdlhkpevjvl",
+        "SECRET_KEY":"akjdasrp183012!!2002++"
+    }
+}
