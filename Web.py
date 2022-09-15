@@ -1,19 +1,20 @@
 from flask import Flask,render_template,request,redirect,url_for
 from flask_sqlalchemy import SQLAlchemy
-from flask_jwt_extended import create_access_token,JWTManager
+from flask_jwt_extended import create_access_token,JWTManager,decode_token
 import hashlib
 from flask_login import LoginManager, UserMixin,login_required, login_user, logout_user, current_user
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import json,smtplib,datetime
 
-
 with open('conf.json','r') as c:
     params = json.load(c)["param"]
+
 salt = 'hello'
 local_server = True
 app = Flask(__name__)
 jwt = JWTManager(app)
+
 if(local_server==True):
     app.config['SQLALCHEMY_DATABASE_URI']=params['local_server']
 else:
@@ -32,13 +33,13 @@ class users(UserMixin, db.Model):
     
 login = LoginManager()
 login.init_app(app)
-login.login_view = '/'
+login.login_view = "/login"
 
 @login.user_loader
 def load_user(id):
     return users.query.get(int(id))
 
-@app.route("/",methods=['POST','GET'])
+@app.route("/login",methods=['POST','GET'])
 def login():
     if current_user.is_authenticated:
         return redirect('/Main')
@@ -83,14 +84,17 @@ def forgetpassword():
     if request.method=='POST':
         email = request.form.get('email')
         if users.query.filter_by(email=email).first():
+           getid = users.query.filter_by(email=email).first()
            msg = MIMEMultipart('alternative')
            msg['Subject'] = "Reset Password"
            msg['From'] = email
            msg['To'] = params['gmail-user']
-           expires = datetime.timedelta(hours=1)
-           reset_token = create_access_token(str(users.id), expires_delta=expires)
-           recover_url = url_for('Reset',email=email,token=reset_token,_external=True)
-           html = render_template('rest-password.html',recover_url=recover_url)
+           expires = datetime.timedelta(minutes=1)
+           reset_token = create_access_token(str(getid.id), expires_delta=expires)
+           url = request.host_url + 'resetpassword/'
+           recover_url = url+reset_token
+           print(recover_url)
+           html = render_template('rest-password.html',url=recover_url)
            part2 = MIMEText(html, 'html')
            msg.attach(part2)
            mail = smtplib.SMTP('smtp.gmail.com', 587)
@@ -102,34 +106,48 @@ def forgetpassword():
            error2= 'Email Send Successfully!'
            return render_template('forgetpassword.html',error2=error2),404           
         else:
-            error1 = 'Alert! invalid email address'
+            error1 = "Alert! email address doesn't exist"
             return render_template('forgetpassword.html',error1=error1),404
     return render_template('forgetpassword.html'),404
 
-@app.route("/resetpassword/<string:email>/<token>",methods=['POST','GET'])
-def Reset(token,email):
+@app.route("/resetpassword/<token>",methods=['POST','GET'])
+def Reset(token):
     if current_user.is_authenticated:
         return redirect('/Main')
     if request.method=='POST':
-        user = users.query.filter_by(email=email).first()
+        user_id = decode_token(token)['sub']
+        print(user_id)
+        user = users.query.filter_by(id=user_id).first()
         password = request.form.get('password')
         password = password+salt
         h = hashlib.md5(password.encode())
         user.password_hash = h.hexdigest()
         db.session.commit()
-        return redirect(url_for('login'))
-    return render_template('forgetpassword1.html',token=token,email=email)
+        return redirect (url_for('login'))
+    return render_template('forgetpassword1.html',token=token)
 
 @app.route('/Main')
 @login_required
 def Main():
     return render_template('Main.html')
- 
+
+@app.route('/')
+def Main1():
+    return render_template('Main1.html')
+
+@app.route('/home')
+@login_required
+def Home():
+    return render_template('home.html')
+
+@jwt.expired_token_loader
+def my_expired_token_callback(jwt_header, jwt_payload):
+    return render_template('index.html')
   
 @app.route("/logout",methods=['POST','GET'])
 def logout():
     logout_user()
-    return redirect(url_for('Main'))
+    return redirect(url_for('Main1'))
 
 
 if __name__ == '__main__':
